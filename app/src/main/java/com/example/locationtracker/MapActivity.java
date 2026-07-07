@@ -1,5 +1,7 @@
 package com.example.locationtracker;
 
+import android.location.Address;
+import android.location.Geocoder;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
 import android.view.View;
@@ -23,14 +25,17 @@ import org.osmdroid.util.GeoPoint;
 import org.osmdroid.views.MapView;
 import org.osmdroid.views.overlay.Marker;
 
+import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.Executors;
 
 public class MapActivity extends AppCompatActivity {
 
     private MapView mapView;
-    private TextView tvTargetPhone, tvTargetLat, tvTargetLng, tvLastUpdated;
+    private TextView tvTargetPhone, tvTargetLat, tvTargetLng, tvLastUpdated, tvTargetAddress;
     private ProgressBar pbLoading;
     private ImageButton btnBack;
 
@@ -62,6 +67,7 @@ public class MapActivity extends AppCompatActivity {
         tvTargetLat = findViewById(R.id.tvTargetLat);
         tvTargetLng = findViewById(R.id.tvTargetLng);
         tvLastUpdated = findViewById(R.id.tvLastUpdated);
+        tvTargetAddress = findViewById(R.id.tvTargetAddress);
         pbLoading = findViewById(R.id.pbLoading);
         btnBack = findViewById(R.id.btnBack);
 
@@ -115,10 +121,33 @@ public class MapActivity extends AppCompatActivity {
                         targetMarker.setPosition(targetPoint);
                         mapView.getController().animateTo(targetPoint);
                         mapView.invalidate(); // Refresh map
+
+                        // Geocode target coordinates to get address name in background
+                        Executors.newSingleThreadExecutor().execute(() -> {
+                            Geocoder geocoder = new Geocoder(MapActivity.this, Locale.getDefault());
+                            try {
+                                List<Address> addresses = geocoder.getFromLocation(lat, lng, 1);
+                                if (addresses != null && !addresses.isEmpty()) {
+                                    String addressStr = addresses.get(0).getAddressLine(0);
+                                    runOnUiThread(() -> {
+                                        tvTargetAddress.setText(addressStr);
+                                    });
+                                } else {
+                                    runOnUiThread(() -> {
+                                        tvTargetAddress.setText("Location address name not found");
+                                    });
+                                }
+                            } catch (IOException e) {
+                                runOnUiThread(() -> {
+                                    tvTargetAddress.setText("Unable to resolve address name");
+                                });
+                            }
+                        });
                     }
                 } else {
                     tvTargetLat.setText("--");
                     tvTargetLng.setText("--");
+                    tvTargetAddress.setText("Location not found");
                     tvLastUpdated.setText("No location shared for this number.");
                     Toast.makeText(MapActivity.this, "This user is not sharing their location", Toast.LENGTH_LONG).show();
                 }
