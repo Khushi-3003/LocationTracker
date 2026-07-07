@@ -1,15 +1,12 @@
 package com.example.locationtracker;
 
 import android.Manifest;
-import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.location.Address;
 import android.location.Geocoder;
 import android.location.Location;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
-import android.widget.Button;
-import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -25,11 +22,6 @@ import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationResult;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.Priority;
-import com.google.firebase.database.DataSnapshot;
-import com.google.firebase.database.DatabaseError;
-import com.google.firebase.database.DatabaseReference;
-import com.google.firebase.database.FirebaseDatabase;
-import com.google.firebase.database.ValueEventListener;
 
 import org.osmdroid.config.Configuration;
 import org.osmdroid.util.GeoPoint;
@@ -47,11 +39,7 @@ public class MainActivity extends AppCompatActivity {
 
     private static final int LOCATION_PERMISSION_REQUEST_CODE = 1001;
 
-    private EditText etPhone;
-    private Button btnGetLocation;
-    private DatabaseReference databaseReference;
-
-    // Self-Location & Map variables
+    // Self-Location & Map views
     private MapView mapView;
     private TextView tvMyAddress, tvMyLat, tvMyLng, tvMyStatus;
     private FusedLocationProviderClient fusedLocationClient;
@@ -71,30 +59,22 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         // Bind layout views
-        etPhone = findViewById(R.id.etPhone);
-        btnGetLocation = findViewById(R.id.btnGetLocation);
         mapView = findViewById(R.id.mapView);
         tvMyAddress = findViewById(R.id.tvMyAddress);
         tvMyLat = findViewById(R.id.tvMyLat);
         tvMyLng = findViewById(R.id.tvMyLng);
         tvMyStatus = findViewById(R.id.tvMyStatus);
 
-        // Initialize Firebase Reference
-        databaseReference = FirebaseDatabase.getInstance().getReference("users");
-
-        // Initialize Map
+        // Configure local Map
         mapView.setMultiTouchControls(true);
-        mapView.getController().setZoom(16.5);
+        mapView.getController().setZoom(17.0);
+        
         myLocationMarker = new Marker(mapView);
         myLocationMarker.setTitle("My Location");
         myLocationMarker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
-        // Use custom color or icon for my location if desired (defaults to red pin)
         mapView.getOverlays().add(myLocationMarker);
 
-        // Track target search button
-        btnGetLocation.setOnClickListener(view -> getTargetLocation());
-
-        // Initialize Location client
+        // Initialize Fused Location Provider Client
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
         setupLocationCallback();
         checkPermissionsAndStartLocationUpdates();
@@ -123,14 +103,16 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void startLocationUpdates() {
-        LocationRequest locationRequest = new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 10000)
-                .setMinUpdateIntervalMillis(5000)
+        LocationRequest locationRequest = new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 8000)
+                .setMinUpdateIntervalMillis(4000)
                 .build();
 
         try {
             fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, null);
+            tvMyStatus.setText("GPS connection established • Acquiring fix...");
         } catch (SecurityException e) {
-            Toast.makeText(this, "Location permission not granted", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Location permissions not granted", Toast.LENGTH_SHORT).show();
+            tvMyStatus.setText("GPS disabled (Permission denied)");
         }
     }
 
@@ -141,7 +123,7 @@ public class MainActivity extends AppCompatActivity {
         tvMyLat.setText(String.format(Locale.getDefault(), "%.6f", lat));
         tvMyLng.setText(String.format(Locale.getDefault(), "%.6f", lng));
 
-        // Update Map Marker
+        // Move and update map marker
         GeoPoint myPoint = new GeoPoint(lat, lng);
         myLocationMarker.setPosition(myPoint);
         
@@ -162,44 +144,13 @@ public class MainActivity extends AppCompatActivity {
                     runOnUiThread(() -> {
                         tvMyAddress.setText(addressStr);
                         SimpleDateFormat sdf = new SimpleDateFormat("hh:mm:ss a", Locale.getDefault());
-                        tvMyStatus.setText("Tracking active • Updated: " + sdf.format(new Date()));
+                        tvMyStatus.setText("Active tracking • Updated: " + sdf.format(new Date()));
                     });
                 } else {
-                    runOnUiThread(() -> tvMyAddress.setText("Address name not found"));
+                    runOnUiThread(() -> tvMyAddress.setText("Location place name not found"));
                 }
             } catch (IOException e) {
-                runOnUiThread(() -> tvMyAddress.setText("Offline or unable to resolve address name"));
-            }
-        });
-    }
-
-    private void getTargetLocation() {
-        final String phoneStr = etPhone.getText().toString().trim();
-        if (phoneStr.isEmpty()) {
-            Toast.makeText(this, "Please enter a phone number", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        btnGetLocation.setEnabled(false);
-        databaseReference.child(phoneStr).addListenerForSingleValueEvent(new ValueEventListener() {
-            @Override
-            public void onDataChange(@NonNull DataSnapshot snapshot) {
-                btnGetLocation.setEnabled(true);
-                if (snapshot.exists()) {
-                    Toast.makeText(MainActivity.this, "Location Detected!", Toast.LENGTH_SHORT).show();
-                    
-                    Intent intent = new Intent(MainActivity.this, MapActivity.class);
-                    intent.putExtra("track_phone", phoneStr);
-                    startActivity(intent);
-                } else {
-                    Toast.makeText(MainActivity.this, "No location found for this phone number.", Toast.LENGTH_LONG).show();
-                }
-            }
-
-            @Override
-            public void onCancelled(@NonNull DatabaseError error) {
-                btnGetLocation.setEnabled(true);
-                Toast.makeText(MainActivity.this, "Database Error: " + error.getMessage(), Toast.LENGTH_SHORT).show();
+                runOnUiThread(() -> tvMyAddress.setText("Unable to resolve location name (offline)"));
             }
         });
     }
@@ -211,7 +162,8 @@ public class MainActivity extends AppCompatActivity {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 startLocationUpdates();
             } else {
-                Toast.makeText(this, "Permission denied. Cannot track device location.", Toast.LENGTH_LONG).show();
+                tvMyStatus.setText("Access denied • Enable location permissions in settings");
+                Toast.makeText(this, "Location permissions are required to display your position.", Toast.LENGTH_LONG).show();
             }
         }
     }
