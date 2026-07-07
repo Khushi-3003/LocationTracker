@@ -30,6 +30,10 @@
                 android:name="org.osmdroid.config.userAgentValue"
                 android:value="${applicationId}" />
         </activity>
+
+        <activity
+            android:name=".MapActivity"
+            android:exported="false" />
     </application>
 
 </manifest>
